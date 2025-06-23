@@ -1,0 +1,29 @@
+{
+  "name": "extensionserver",
+  "version": "0.1.0",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon --exec babel-node ./server.js",
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Ken Ingram; Solution Design Laboratory",
+  "license": "GPL-3.0-only",
+  "description": "A REST API server for processing requests from browser extensions.",
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "dependencies": {
+    "@babel/core": "^7.27.4",
+    "@babel/node": "^7.27.1",
+    "@babel/preset-env": "^7.27.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "express-async-errors": "^3.1.1",
+    "morgan": "^1.10.0",
+    "mysql2": "^3.14.1",
+    "pug": "^3.0.3"
+  }
+}
