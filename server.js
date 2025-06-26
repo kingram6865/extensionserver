@@ -41,11 +41,6 @@ app.get('/', (req, res) => {
   res.render('root', {})
 })
 
-// Health check endpoint
-// app.get('/health', (req, res) => {
-//   res.status(200).json({ status: 'healthy' });
-// });
-
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // Add all the routes to the Express server exported from routes/{object model}/index.js
