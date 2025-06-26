@@ -42,9 +42,9 @@ app.get('/', (req, res) => {
 })
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy' });
-});
+// app.get('/health', (req, res) => {
+//   res.status(200).json({ status: 'healthy' });
+// });
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
