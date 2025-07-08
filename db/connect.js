@@ -51,7 +51,7 @@ export async function executeSQL(sql, db, dbsrc, data = []) {
 
   try {
     const [rows, fields] = await conn.promise().query(sql);
-    return {success: true, data: rows, fields: (fields?.length > 0) ? fields : []};
+    return { success: true, data: rows };
   } catch (err) {
     // Query Error keys: [ 'message', 'code', 'errno', 'sql', 'sqlState', 'sqlMessage' ]
     if (err.sqlState === '45000') {
@@ -60,4 +60,3 @@ export async function executeSQL(sql, db, dbsrc, data = []) {
     throw err;
   }
 }
-
