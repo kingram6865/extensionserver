@@ -1,5 +1,5 @@
 export function formatDateString(input) {
-  let newDate = new Date(input);
+  let newDate = (typeof input === 'string') ? new Date(input) : new Date();
   const year = newDate.getFullYear();
   const month = (newDate.getMonth() < 9) ? `0${newDate.getMonth() + 1}` : newDate.getMonth() + 1;
   const day = (newDate.getDate() < 10) ? `0${newDate.getDate()}` : newDate.getDate();
