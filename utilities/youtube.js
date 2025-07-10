@@ -6,6 +6,22 @@ import { formatPublishedDate, formatDuration, secondsToHMS } from './tools';
 const baseUrl = `https://youtube.googleapis.com/youtube/v3`
 const targetDatabase = 'random_facts'
 
+function dbDataCondenser(input) {
+  return {
+    objid: input.objid,
+    EntryDate: input.entry_date,
+    UplaodDate: input.upload_date,
+    ChannelOwnerId: input.channel_owner_id,
+    ChannelOwnerName: input.channel_owner_name,
+    AmountViewed: input.amount_viewed,
+    PlayLength: input.play_length,
+    Caption: input.caption,
+    Status: input.status,
+    Rewatch: input.rewatch,
+    Reuse: input.reuse
+  }
+}
+
 export async function getVideoData(videoId) {
   // console.log(`utilities/youtube.js Line 9 -> getVideoData(${videoId})`)
   const videoUrl = `${baseUrl}/videos?part=snippet%2CcontentDetails%2Cstatistics&id=${videoId}&key=${process.env.API_KEY1}`;
@@ -120,7 +136,6 @@ async function updateWatchTime(input) {
 
   try {
     let results = await executeSQL(SQL, targetDatabase, 55, data);
-    console.log(`Updated objid = ${input.objid} amount_viewed to ${input.time}`);
     return {results, message};
   } catch(err) {
     console.log(err)
@@ -150,7 +165,6 @@ async function dbAddChannel(input) {
 
 export async function validateVideoId(input) {
   console.log('Line 141: ', JSON.stringify(input))
-  // return {message: 'Reached backend!'}
   let output
   const videoId = input.videoid
   const rewatch = input.rewatch
@@ -163,11 +177,12 @@ export async function validateVideoId(input) {
     channelId = videodata.data[0].channel_owner_id;
     
     if (input.viewed) {
-      messages.updateNotes = await updateWatchTime({time: secondsToHMS(input.time), objid: videodata.data[0].objid, completed: input.complete})
+      let updateResponse = await updateWatchTime({time: secondsToHMS(input.time), objid: videodata.data[0].objid, completed: input.complete})
+      messages.UpdateNotes = `Updated [${videodata.data[0].objid}] amount viewed. ${updateResponse.messages.updateNotes.results.data.affectedRows} row was affected.`
     } else {
       messages.updateNotes = `The video is already archived. No Changes being made. Amount Viewed = ${videodata.data[0].amount_viewed}`
     }
-    output = {messages, ArchiveInfo: videodata}
+    output = {messages, AffectedRecord: dbDataCondenser(videodata.data[0])}
     console.log(JSON.stringify(output, null, 2));
   } else {
     messages.videoMessage = `${videoId} does not exist in the archive. Retrieving data from Youtube API`;
