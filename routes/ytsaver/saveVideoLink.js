@@ -1,12 +1,11 @@
 import { executeSQL } from "../../db/connect";
+import { validateVideoId } from "../../utilities/youtube";
 
 export const saveVideoLink = {
   path: "/ytsaver/save",
   method: "post",
   handler: async (req, res) => {
-    const { videoid, time, complete } = req.body
-    const SQL = 'INSERT INTO ytsaver (videoid, time, complete) VALUES (?,?,?)'
-    let results = await executeSQL(SQL, 'test', 80, [videoid, time, `${complete}`]);
-    return res.json(results);
+    let apiVideoData = await validateVideoId(req.body)
+    return res.json(apiVideoData);
   }
 }
