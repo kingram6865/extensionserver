@@ -1,0 +1,5 @@
+{
+  "events": {
+    "restart": "echo \"[$(date +'%Y-%m-%d %H:%M:%S')] App restarted due to changes\""
+  }
+}
