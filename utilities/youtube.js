@@ -10,7 +10,7 @@ function dbDataCondenser(input) {
   return {
     objid: input.objid,
     EntryDate: input.entry_date,
-    UplaodDate: input.upload_date,
+    UploadDate: input.upload_date,
     ChannelOwnerId: input.channel_owner_id,
     ChannelOwnerName: input.channel_owner_name,
     AmountViewed: input.amount_viewed,
@@ -18,7 +18,7 @@ function dbDataCondenser(input) {
     Caption: input.caption,
     Status: input.status,
     Rewatch: input.rewatch,
-    Reuse: input.reuse
+    Videoid: input.videoid
   }
 }
 
@@ -112,9 +112,9 @@ async function dbAddVideo(input) {
 
   try {
     const results = await executeSQL(SQL, targetDatabase, 55, data);
-    let checkSQL = `SELECT objid, caption, amount_viewed, play_length, notes, debug_info FROM youtube_downloads WHERE objid = ${results.data.insertId}`
+    let checkSQL = `SELECT objid, videoid, caption, amount_viewed, play_length, notes, debug_info FROM youtube_downloads WHERE objid = ${results.data.insertId}`
     executeSQL(checkSQL, targetDatabase, 55)
-      .then(x => console.log(`Line 101: [${color.brightYellow}${x.data[0].objid}${color.Reset}] ${color.brightBlue}${x.data[0].caption}${color.Reset} (${color.brightGreen}${x.data[0].amount_viewed}${color.Reset} <==> ${color.brightCyan}${x.data[0].play_length}${color.Reset})`));
+      .then(x => console.log(`Line 117 (Added): ${color.brightMagenta}${x.data[0].videoid}${color.Reset} [${color.brightYellow}${x.data[0].objid}${color.Reset}] ${color.brightBlue}${x.data[0].caption}${color.Reset} (${color.brightGreen}${x.data[0].amount_viewed}${color.Reset} <==> ${color.brightCyan}${x.data[0].play_length}${color.Reset})`));
 
     return results;
   } catch(err) {
@@ -124,19 +124,20 @@ async function dbAddVideo(input) {
 
 async function updateWatchTime(input) {
   let SQL, data, message
-  if (input.complete) {
+  if (input.completed) {
     data = [input.objid];
     SQL="UPDATE youtube_downloads SET viewed = 1, amount_viewed = play_length WHERE objid = ?";
     message = `${input.objid} is updated to 100% viewed.`;
   } else {
     data = [input.time, input.objid];
     SQL="UPDATE youtube_downloads SET viewed = 1, amount_viewed = ? WHERE objid = ?";
-    message = `${input.objid} amount_viewed is updated to ${input.time}.`;;
+    message = `${input.objid} amount_viewed is updated to ${input.time}.`;
   }
 
   try {
     let results = await executeSQL(SQL, targetDatabase, 55, data);
-    return {results, message};
+    let updateResults = await executeSQL("SELECT * FROM youtube_downloads WHERE objid = ?", targetDatabase, 55, [input.objid])
+    return {results, message, changeStatus: updateResults.data[0].amount_viewed };
   } catch(err) {
     console.log(err)
   }
@@ -164,7 +165,7 @@ async function dbAddChannel(input) {
 }
 
 export async function validateVideoId(input) {
-  console.log('Line 141: ', JSON.stringify(input))
+  // console.log('Line 168: ', JSON.stringify(input), secondsToHMS(input.time))
   let output
   const videoId = input.videoid
   const rewatch = input.rewatch
@@ -178,12 +179,17 @@ export async function validateVideoId(input) {
     
     if (input.viewed) {
       let updateResponse = await updateWatchTime({time: secondsToHMS(input.time), objid: videodata.data[0].objid, completed: input.complete})
-      messages.UpdateNotes = `Updated [${videodata.data[0].objid}] amount viewed. ${updateResponse.messages.updateNotes.results.data.affectedRows} row was affected.`
+      // messages.UpdateNotes = `Updated [${videodata.data[0].objid}] amount viewed to ${videodata.data[0].amount_viewed}.`
+      messages.UpdateNotes = updateResponse.message
     } else {
-      messages.updateNotes = `The video is already archived. No Changes being made. Amount Viewed = ${videodata.data[0].amount_viewed}`
+      messages.updateNotes = `([${videoId}] ${videodata.data[0].caption}) is archived. No Changes. Amount Viewed = ${videodata.data[0].amount_viewed}`
     }
-    output = {messages, AffectedRecord: dbDataCondenser(videodata.data[0])}
-    console.log(JSON.stringify(output, null, 2));
+
+    // let report = dbDataCondenser(videodata.data[0]) // videodata is before the update. The update function should send back the data after the update
+    output = {messages}
+    console.log(output)
+    // console.log(JSON.stringify(output, null, 2));
+    // console.log(`Line 190 (Updated): ${report.Videoid} [${report.objid}] ${report.Caption} (Amount Viewed => ${report.PlayLength})`);
   } else {
     messages.videoMessage = `${videoId} does not exist in the archive. Retrieving data from Youtube API`;
     videoAPIData = await getVideoData(videoId)
@@ -195,8 +201,9 @@ export async function validateVideoId(input) {
       addVideoResults = await dbAddVideo({...videoAPIData, ChannelOwnerId: channeldata.data[0].objid, Rewatch: rewatch});
       // messages.addVideoResultsmessage = `Added objid[${addVideoResults.data[0].insertId}] ${videoId} with channel owner objid[${channeldata.data[0].objid}] ${videoAPIData.ChannelId}(${channeldata.data[0].owner_name})`
       // messages.addVideoResultsmessage = resultsAddVideo
-      output = { messages, dbVideoInfo: videodata.data[0], dbChannelInfo: channeldata.data[0], videoAPIData, addVideoResults }
+      output = { messages, dbChannelInfo: channeldata.data[0], videoAPIData, addVideoResults }
       // output = { messages, dbChannelInfo: channeldata.data[0], videoAPIData, addVideoResults }
+      console.log(`Added ${videoId} to existing channel [${channeldata.data[0].objid}] ${channeldata.data[0].owner_name}`)
     } else {
       messages.channelmessage = `${videoId} and it's parent channel ${videoAPIData.ChannelId} do not exist in archive. Retrieving Youtube API data for channel adding both to archive.`
       channelAPIData = await getChannelData(videoAPIData.ChannelId);
@@ -205,9 +212,12 @@ export async function validateVideoId(input) {
       videoAPIData.Viewed = input.viewed;
       videoAPIData.AmountViewed = (input.viewed) ? videoAPIData.PlayLength : secondsToHMS(input.time);
       addVideoResults = await dbAddVideo({...videoAPIData, Rewatch: rewatch})
-      output = { messages, dbVideoInfo: videodata.data[0], dbChannelInfo: channeldata.data[0], videoAPIData, channelAPIData, addChannelResults, addVideoResults }
+      output = { messages, videoAPIData, channelAPIData, addChannelResults, addVideoResults }
+      // console.log(`Archived channel ${channeldata.data[0].owner_name} [objid = ${addChannelResults.insertId}] and archived video link ${videoId}`)
+      // console.log(output);
     }
   }
 
+  // console.log(output)
   return output;
 }
