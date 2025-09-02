@@ -192,6 +192,9 @@ export async function validateVideoId(input) {
       updateResponse = await updateWatchTime({time: secondsToHMS(input.time), objid: videodata.data[0].objid, completed: 0})
       messages.responseMessage = `([${videoId}] ${videodata.data[0].caption}) is archived as partially viewed. Amount Viewed = ${secondsToHMS(input.time)}`
       console.log(`(Update ${moment.dateTime} '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightBlue}${videodata.data[0].caption}${color.Reset} is archived. Amount Viewed ==> ${updateResponse.changeStatus} [193]`)
+    } else if (input.complete === 3) {
+      updateResponse = {}
+      messages.responseMessage = `([${videoId}] ${videodata.data[0].caption}) has view time = ${videodata.data[0].amount_viewed}`
     } else {
       // console.log(`${input.videoid}, ${input.button}, ${input.complete}`)
       if (input.button === 'save') {
@@ -209,10 +212,13 @@ export async function validateVideoId(input) {
     
     // console.log(JSON.stringify(output, null, 2));
     // console.log(`Line 190 (Updated): ${report.Videoid} [${report.objid}] ${report.Caption} (Amount Viewed => ${report.PlayLength})`);
+  } else if (input.complete === 3) {
+    messages.responseMessage = `${videoId} is not archived.`
+    output = { messages }
   } else {
-    messages.videoMessage = `${videoId} does not exist in the archive. Retrieving data from Youtube API`;
     videoAPIData = await getVideoData(videoId)
     channeldata = await channelExists(videoAPIData.ChannelId)
+    messages.videoMessage = `${videoId} does not exist in the archive. Retrieving data from Youtube API`;
     if (channeldata.data.length) {
       messages.channelmessage = `Add ${videoId} with channel owner ${videoAPIData.ChannelId}(${channeldata.data[0].owner_name})`
       videoAPIData.Viewed = input.complete;
@@ -233,7 +239,7 @@ export async function validateVideoId(input) {
       videoAPIData.AmountViewed = (input.complete) ? videoAPIData.PlayLength : secondsToHMS(input.time);
       addVideoResults = await dbAddVideo({...videoAPIData, Rewatch: rewatch})
       // console.log(`[${moment.dateTime}] Archived channel ${channelAPIData.OwnerName} [objid = ${addChannelResults.data.insertId}] and archived video link ${videoId} [objid = ${addVideoResults.data.insertId}] [232]`)
-      messages.responseMessage = `Archived channel ${channelAPIData.OwnerName} [objid = ${addChannelResults.data.insertId}] and archived video link ${videoId} [objid = ${addVideoResults.data.insertId}] [233]`
+      messages.responseMessage = `Archived channel ${channelAPIData.OwnerName} [objid = ${addChannelResults.data.insertId}] and archived video link ${videoId} [objid = ${addVideoResults.data.insertId}] [236]`
       output = { messages, videoAPIData, channelAPIData, addChannelResults, addVideoResults }
       // console.log(output);
     }
