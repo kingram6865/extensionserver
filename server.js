@@ -7,7 +7,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 
 import * as conColor from './utilities/consoleColors';
-import { appLogger } from './utilities/logging';
+import { appLogger, createStructuredLogger, requestLogger, interceptConsoleTo } from './utilities/logging';
 
 import { ytsaverRoutes } from './routes/ytsaver';
 
@@ -21,13 +21,31 @@ const sslOptions = {
 };
 
 const myLogger = appLogger(__dirname)
+
+const logger = createStructuredLogger(__dirname, {
+  level: process.env.LOG_LEVEL || 'info', // e.g., 'debug' in dev
+  prefix: 'app'                           // logs/app-YYYY-MM-DD.log
+});
+
 const accessLogStream = fs.createWriteStream(path.join(__dirname, `/logs/access.log`), { flags: 'a' })
 
 const app = express();
 app.use(cors());
 
+// attach per-request logger
+app.use(requestLogger(logger));
+
+// optional: route console.* into the structured app log in production
+// if (process.env.NODE_ENV === 'production') {
+  interceptConsoleTo(logger);
+// }
+
 /* dev, combined or common */
-app.use(morgan('common', { stream: accessLogStream }))
+// (Optional) include reqId in access logs
+// app.use(morgan('common', { stream: accessLogStream }))
+morgan.token('rid', req => req.id || '-');
+// app.use(morgan(':method :url :status :response-time ms rid=:rid'));
+
 app.use(express.static(__dirname + '/static', { dotfiles: 'allow' }))
 
 app.use(express.json({ limit: '3mb'}));
