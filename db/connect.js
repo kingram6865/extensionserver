@@ -7,7 +7,7 @@ const DBCONFIG = {
   port: process.env.MYSQLPORT,
   user: process.env.MYSQLUSER,
   password: process.env.MYSQLPWD,
-  connectionLimit: 20,
+  connectionLimit: 50,
   maxIdle: 30,
   idleTimeout: 60000,
   queueLimit: 0
