@@ -13,16 +13,6 @@ export const latestSaves = {
     const oldest = formatDateString(start);
     const latest = formatDateString(end);
     
-    // if (oldest && latest) {
-    //   sql = "SELECT * from youtube_downloads WHERE entry_date >= ? AND entry_date <= ?"
-    // } else if (oldest) {
-    //   sql = "SELECT * from youtube_downloads WHERE entry_date >= ? AND entry_date <= ?"
-    // } else if (latest) {
-    //   sql = "SELECT * from youtube_downloads WHERE entry_date >= ? AND entry_date <= ?"
-    // } else {
-    //   sql = "SELECT * from youtube_downloads WHERE entry_date >= ? AND entry_date <= ?"
-    // }
-    
     sql = "SELECT * from youtube_downloads WHERE entry_date >= ? AND entry_date <= ?"
 
     try {
