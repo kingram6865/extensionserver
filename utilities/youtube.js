@@ -1,11 +1,45 @@
 import 'dotenv/config';
 import axios from 'axios';
+import util from 'node:util';
 import { executeSQL, formatSQL } from '../db/connect';
 import * as color from './consoleColors'
 import { formatPublishedDate, formatDuration, secondsToHMS, formatDateString } from './tools';
 const baseUrl = `https://youtube.googleapis.com/youtube/v3`
 const targetDatabase = 'random_facts'
 // const targetDatabase = 'test'
+
+function logAxiosError(err, context = {}) {
+  // Axios puts the useful API error payload on err.response.data
+  const status = err?.response?.status;
+  const statusText = err?.response?.statusText;
+  const url = err?.config?.url;
+  const method = err?.config?.method;
+
+  const data = err?.response?.data;
+  const reason =
+    data?.error?.errors?.[0]?.reason ||
+    data?.error?.status ||
+    data?.error?.message;
+
+  console.error('YouTube API request failed', {
+    ...context,
+    status,
+    statusText,
+    method,
+    url,
+    reason,
+  });
+
+  if (data) {
+    // Pretty-print the API payload (often includes "reason")
+    console.error('YouTube API error payload:\n', util.inspect(data, { depth: 10, colors: false }));
+  }
+}
+
+
+
+
+
 
 function dbDataCondenser(input) {
   return {
@@ -25,10 +59,20 @@ function dbDataCondenser(input) {
 
 export async function getVideoData(videoId) {
   // console.log(`utilities/youtube.js Line 9 -> getVideoData(${videoId})`)
-  const videoUrl = `${baseUrl}/videos?part=snippet%2CcontentDetails%2Cstatistics&id=${videoId}&key=${process.env.API_KEY1}`;
-  
+  // const videoUrl = `${baseUrl}/videos?part=snippet%2CcontentDetails%2Cstatistics&id=${videoId}&key=${process.env.API_KEY1}`;
+  if (!process.env.API_KEY1) {
+    throw new Error('Missing env var API_KEY1 (YouTube API key)');
+  }
+
+  const videoUrl = `${baseUrl}/videos?part=snippet%2CcontentDetails%2Cstatistics&id=${encodeURIComponent(videoId)}&key=${process.env.API_KEY1}`;
+
   try {
     const result = await axios.get(videoUrl);
+    if (!result?.data?.items?.length) {
+      // Not a 403 case, but prevents TypeErrors later.
+      return null;
+    }    
+
     const desiredData = {
       UploadDate: formatPublishedDate(result.data.items[0].snippet.publishedAt),
       ChannelId: result.data.items[0].snippet.channelId,
@@ -43,14 +87,22 @@ export async function getVideoData(videoId) {
 
     return desiredData;
   } catch(err) {
-    console.log(err)
+    logAxiosError(err, { op: 'getVideoData', videoId });
+    throw err;
   }
 }
 
 export async function getChannelData(channelId) {
-  const channelUrl =`${baseUrl}/channels?part=snippet%2CcontentDetails%2Cstatistics&id=${channelId}&key=${process.env.API_KEY1}`;
+  if (!process.env.API_KEY1) {
+   throw new Error('Missing env var API_KEY1 (YouTube API key)');
+  }
+
+  const channelUrl =`${baseUrl}/channels?part=snippet%2CcontentDetails%2Cstatistics&id=${encodeURIComponent(channelId)}&key=${process.env.API_KEY1}`;
+
   try {
     const result = await axios.get(channelUrl);
+    if (!result?.data?.items?.length) return null;
+
     const desiredData = {
       ChannelId: result.data.items[0].id,
       OwnerName: result.data.items[0].snippet.title,
@@ -63,7 +115,8 @@ export async function getChannelData(channelId) {
 
     return desiredData;
   } catch(err) {
-    console.log(err)
+    logAxiosError(err, { op: 'getChannelData', channelId });
+    throw err;
   }
 }
 
@@ -115,7 +168,7 @@ async function dbAddVideo(input) {
     const results = await executeSQL(SQL, targetDatabase, 55, data);
     let checkSQL = `SELECT objid, videoid, caption, amount_viewed, play_length, notes, debug_info FROM youtube_downloads WHERE objid = ${results.data.insertId}`
     executeSQL(checkSQL, targetDatabase, 55)
-      .then(x => console.log(`(New ${input.Viewed} ): ${color.brightMagenta}${x.data[0].videoid}${color.Reset} [${color.brightYellow}${x.data[0].objid}${color.Reset}] ${color.brightBlue}${x.data[0].caption}${color.Reset} (${color.brightGreen}${x.data[0].amount_viewed}${color.Reset} <==> ${color.brightCyan}${x.data[0].play_length}${color.Reset}) [118]`));
+      .then(x => console.log(`(New ${input.Viewed} ): ${color.brightMagenta}${x.data[0].videoid}${color.Reset} [${color.brightYellow}${x.data[0].objid}${color.Reset}] ${color.brightCyan}${x.data[0].caption}${color.Reset} (${color.brightGreen}${x.data[0].amount_viewed}${color.Reset} <==> ${color.brightCyan}${x.data[0].play_length}${color.Reset}) [118]`));
 
     return results;
   } catch(err) {
@@ -176,6 +229,7 @@ export async function validateVideoId(input) {
   const messages = {}
   const moment = formatDateString()
   videodata = await videoExists(videoId);
+  // console.log(videodata)
   if (videodata.data.length) {
     let updateResponse
     channelId = videodata.data[0].channel_owner_id;
@@ -183,24 +237,24 @@ export async function validateVideoId(input) {
     if (input.complete === 0 && !videodata.data[0].viewed) {
       updateResponse = await updateWatchTime({time: secondsToHMS(input.time), objid: videodata.data[0].objid, completed: 0})
       messages.responseMessage = updateResponse.message
-      console.log(`(Archived ${moment.dateTime} '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightBlue}${videodata.data[0].caption}${color.Reset} is archived and has not yet been viewed [185]`)      
+      console.log(`(Archived ${moment.dateTime} '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightCyan}${videodata.data[0].caption}${color.Reset} is archived and has not yet been viewed [185]`)      
     } else if (input.complete === 1 && videodata.data[0].pct_viewed < 100) {
       updateResponse = await updateWatchTime({time: secondsToHMS(input.time), objid: videodata.data[0].objid, completed: 1})
       messages.responseMessage = `([${videoId}] ${videodata.data[0].caption}) is archived as fully viewed.`
-      console.log(`(Completed ${moment.dateTime} '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightBlue}${videodata.data[0].caption}${color.Reset} is archived. View amount changed to ${updateResponse.changeStatus} [189]`)
+      console.log(`(Completed ${moment.dateTime} '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightCyan}${videodata.data[0].caption}${color.Reset} is archived. View amount changed to ${updateResponse.changeStatus} [189]`)
     } else if (input.complete === 2 && videodata.data[0].pct_viewed < 100) {
       updateResponse = await updateWatchTime({time: secondsToHMS(input.time), objid: videodata.data[0].objid, completed: 0})
       messages.responseMessage = `([${videoId}] ${videodata.data[0].caption}) is archived as partially viewed. Amount Viewed = ${secondsToHMS(input.time)}`
-      console.log(`(Update ${moment.dateTime} '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightBlue}${videodata.data[0].caption}${color.Reset} is archived. Amount Viewed ==> ${updateResponse.changeStatus} [193]`)
+      console.log(`(Update ${moment.dateTime} '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightCyan}${videodata.data[0].caption}${color.Reset} is archived. Amount Viewed ==> ${updateResponse.changeStatus} [193]`)
     } else if (input.complete === 3) {
       updateResponse = {}
       messages.responseMessage = `([${videoId}] ${videodata.data[0].caption}) has view time = ${videodata.data[0].amount_viewed}`
     } else {
       // console.log(`${input.videoid}, ${input.button}, ${input.complete}`)
       if (input.button === 'save') {
-        console.log(`(${moment.dateTime} No action on '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightBlue}${videodata.data[0].caption}${color.Reset} has been archived. [196]`)
+        console.log(`(${moment.dateTime} No action on '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightCyan}${videodata.data[0].caption}${color.Reset} has been archived. [196]`)
       } else if (input.button === 'watched' || input.button == 'update') {
-        console.log(`(${moment.dateTime} No action on '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightBlue}${videodata.data[0].caption}${color.Reset} has been fully viewed. [198]`)
+        console.log(`(${moment.dateTime} No action on '${input.button}') ${color.brightMagenta}${videoId}${color.Reset} [${color.brightYellow}${videodata.data[0].objid}${color.Reset}] ${color.brightCyan}${videodata.data[0].caption}${color.Reset} has been fully viewed. [198]`)
       }
       
       // messages.updateNotes = `Archived and fully viewed. No action for ${videoId} ${videodata.data[0].objid} ${videodata.data[0].caption} '${input.button}'`
@@ -217,6 +271,14 @@ export async function validateVideoId(input) {
     output = { messages }
   } else {
     videoAPIData = await getVideoData(videoId)
+
+    if (!videoAPIData) {
+      // Video exists? private? deleted? invalid? This is not the 403 case.
+      // But prevents crashes.
+      messages.responseMessage = `No data returned for ${videoId} (invalid, private, or deleted).`;
+      return { messages };
+    }    
+
     channeldata = await channelExists(videoAPIData.ChannelId)
     messages.videoMessage = `${videoId} does not exist in the archive. Retrieving data from Youtube API`;
     if (channeldata.data.length) {
