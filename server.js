@@ -7,9 +7,10 @@ import cors from 'cors';
 import morgan from 'morgan';
 
 import * as conColor from './utilities/consoleColors';
-import { appLogger, createStructuredLogger, requestLogger, interceptConsoleTo } from './utilities/logging';
+import { appLogger, createStructuredLogger, requestLogger, interceptConsoleTo } from './utilities/logging.js';
 
 import { ytsaverRoutes } from './routes/ytsaver';
+import { scraperRoutes } from './routes/torscraper';
 
 const PORT = process.env.PORT || 3019;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3018; // New HTTPS port
@@ -48,7 +49,7 @@ morgan.token('rid', req => req.id || '-');
 
 app.use(express.static(__dirname + '/static', { dotfiles: 'allow' }))
 
-app.use(express.json({ limit: '3mb'}));
+app.use(express.json({ limit: process.env.JSON_LIMIT || '15mb' }));
 
 /* Set up html templating */
 app.engine('.html', require('pug').__express);
@@ -63,6 +64,10 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // Add all the routes to the Express server exported from routes/{object model}/index.js
 ytsaverRoutes.forEach(route => {
+    app[route.method](route.path, route.handler);
+});
+
+scraperRoutes.forEach(route => {
     app[route.method](route.path, route.handler);
 });
 
