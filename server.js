@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
+import http from 'http';
 import https from 'https';
 import express from 'express';
 import cors from 'cors';
@@ -11,6 +12,7 @@ import { appLogger, createStructuredLogger, requestLogger, interceptConsoleTo } 
 
 import { ytsaverRoutes } from './routes/ytsaver';
 import { scraperRoutes } from './routes/torscraper';
+import { getJsonLimitValue } from './config/serverLimits.js';
 
 const PORT = process.env.PORT || 3019;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3018; // New HTTPS port
@@ -49,7 +51,7 @@ morgan.token('rid', req => req.id || '-');
 
 app.use(express.static(__dirname + '/static', { dotfiles: 'allow' }))
 
-app.use(express.json({ limit: process.env.JSON_LIMIT || '15mb' }));
+app.use(express.json({ limit: getJsonLimitValue() }));
 
 /* Set up html templating */
 app.engine('.html', require('pug').__express);
@@ -73,4 +75,9 @@ scraperRoutes.forEach(route => {
 
 const httpsServer = https.createServer(sslOptions, app);
 let httpsMessage = `${conColor.brightBlue}API Browser Extension Server Started${conColor.Reset} [IP: ${conColor.brightYellow}${SERVER}${conColor.Reset}, PORT: ${conColor.brightYellow}${HTTPS_PORT}${conColor.Reset}, start time: (${conColor.brightGreen}${TIME.toLocaleString()}${conColor.Reset}])`
-  httpsServer.listen(HTTPS_PORT, process.env.HOST, () => myLogger.log(httpsMessage));
+httpsServer.listen(HTTPS_PORT, process.env.HOST, () => myLogger.log(httpsMessage));
+
+const httpServer = http.createServer(app);
+let httpMessage = `${conColor.brightBlue}API Browser Extension HTTP Server Started${conColor.Reset} [IP: ${conColor.brightYellow}${SERVER}${conColor.Reset}, PORT: ${conColor.brightYellow}${PORT}${conColor.Reset}, start time: (${conColor.brightGreen}${TIME.toLocaleString()}${conColor.Reset}])`;
+
+httpServer.listen(PORT, process.env.HOST, () => myLogger.log(httpMessage));
