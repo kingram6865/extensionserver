@@ -36,6 +36,7 @@ export function validateDomPayload(body) {
   const source = cleanString(body.source);
   const pageType = cleanString(body.pageType);
   const capturedAt = cleanString(body.capturedAt);
+  const pageTitle = cleanString(body.pageTitle);
 
   if (!urlResult.ok) {
     errors.push(urlResult.error);
@@ -59,6 +60,7 @@ export function validateDomPayload(body) {
     payload: {
       source,
       pageType,
+      pageTitle,
       url: parsedUrl.toString(),
       hostname: parsedUrl.hostname,
       pathname: parsedUrl.pathname,
