@@ -1,4 +1,6 @@
+import axios from 'axios';
 import {
+  createDocument,
   cleanText,
   firstText,
   firstHtml,
@@ -6,6 +8,7 @@ import {
   normalizeSizeToMBytes,
   uniqueStrings,
   parseContentItem,
+  getTorrentQuestInfo,
 } from './helpers.js';
 
 function torrentProjectContents(document) {
@@ -54,7 +57,6 @@ function torrentQuestMeta(document) {
     category: cleanText(dd[1]?.textContent || ''),
     numFiles: parseInteger(dd[2]?.textContent),
     mBytes: normalizeSizeToMBytes(dd[3]?.textContent),
-    info: dd[4]?.innerHTML?.trim() || ''
   };
 }
 
@@ -135,15 +137,18 @@ export const parserProfiles = [
 
     selectors: {
       torrentName: ['.header-content', 'h1', 'title'],
-      info: ['#info', '.description']
+      info: []
     },
 
-    extract: document => {
+    extract: async document => {
       const meta = torrentQuestMeta(document);
       const stats = torrentQuestStats(document);
 
       return {
-        ...meta,
+        category: meta.category,
+        numFiles: meta.numFiles,
+        mBytes: meta.mBytes,
+        info: await getTorrentQuestInfo(document),
         ...stats,
         contents: torrentQuestContents(document)
       };
