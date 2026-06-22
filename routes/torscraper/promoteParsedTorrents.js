@@ -125,18 +125,6 @@ export const promoteParsedTorrents = {
 
       for (const row of rows) {
         const mapped = mapParsedTorrentToDownloaded(row);
-        const existing = await findExistingTorrent(mapped);
-
-        if (existing) {
-          promotedRows.push({
-            scrapedPageId: row.scraped_page_id,
-            action: 'skip_existing',
-            existingObjid: existing.objid,
-            mapped
-          });
-
-          continue;
-        }
 
         if (dryRun) {
           const existing = await findExistingTorrent(mapped);
@@ -151,14 +139,36 @@ export const promoteParsedTorrents = {
           continue;
         }
 
-        const insertResult = await insertTorrent(mapped);
+        try {
+          const insertResult = await insertTorrent(mapped);
+          const insertId = insertResult.data?.insertId || insertResult.insertId || null;
 
-        promotedRows.push({
-          scrapedPageId: row.scraped_page_id,
-          action: 'insert',
-          insertId: insertResult.data?.insertId || insertResult.insertId || null,
-          mapped
-        });
+          promotedRows.push({
+            scrapedPageId: row.scraped_page_id,
+            action: insertId ? 'insert' : 'insert_attempted',
+            insertId,
+            mapped
+          });
+        } catch (err) {
+          const message = err.message || String(err);
+          const duplicateLike =
+            err.code === 'ER_DUP_ENTRY' ||
+            /duplicate/i.test(message) ||
+            /already exists/i.test(message) ||
+            /exists/i.test(message);
+
+          if (!duplicateLike) {
+            throw err;
+          }
+
+          promotedRows.push({
+            scrapedPageId: row.scraped_page_id,
+            action: 'blocked_duplicate',
+            insertId: null,
+            error: message,
+            mapped
+          });
+        }
       }
 
       const summary = promotedRows.reduce((acc, row) => {
