@@ -120,7 +120,7 @@ export const parseScrapedPages = {
 
       for (const row of rows) {
         try {
-          const parsed = parseSavedPage(row);
+          const parsed = await parseSavedPage(row);
           parsedRows.push({
             scrapedPageId: row.objid,
             ok: true,
