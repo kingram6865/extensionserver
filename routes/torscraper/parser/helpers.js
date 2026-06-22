@@ -1,3 +1,4 @@
+import axios from 'axios';
 import jsdom from 'jsdom';
 
 const { JSDOM } = jsdom;
@@ -9,6 +10,18 @@ export function createDocument(html, url) {
 export function cleanText(value) {
   if (typeof value !== 'string') return '';
   return value.replace(/\s+/g, ' ').trim();
+}
+
+export function nullIfBlank(value) {
+  if (value === null || value === undefined) return null;
+
+  const text = String(value).trim();
+
+  if (!text || text === '-') {
+    return null;
+  }
+
+  return value;
 }
 
 export function firstText(document, selectors = []) {
@@ -168,4 +181,54 @@ export function comparableName(value) {
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+export function getTorrentQuestInfoId(document) {
+  const anchors = Array.from(document.querySelectorAll('a[href]'));
+
+  for (const anchor of anchors) {
+    const href = anchor.getAttribute('href') || '';
+    const text = cleanText(anchor.textContent || '');
+    const title = cleanText(anchor.getAttribute('title') || '');
+
+    const isInfoLink =
+      /^javascript:Information\(/i.test(href) &&
+      text.toUpperCase() === 'INFO' &&
+      /important information/i.test(title);
+
+    if (!isInfoLink) continue;
+
+    const match = href.match(/Information\(['"]file_([A-Za-z0-9]+)['"]\)/i);
+    if (match) return match[1];
+  }
+
+  return null;
+}
+
+export async function getTorrentQuestInfo(document) {
+  const infoId = getTorrentQuestInfoId(document);
+
+  if (!infoId) {
+    return null;
+  }
+
+  const infoUrl = `https://torrentquest.com/info/${infoId}/`;
+
+  try {
+    const response = await axios.get(infoUrl, {
+      timeout: 15000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0'
+      }
+    });
+
+    const infoDocument = createDocument(response.data, infoUrl);
+
+    // TorrentQuest info payload should come only from <pre>.
+    const preHtml = infoDocument.querySelector('pre')?.outerHTML?.trim();
+
+    return nullIfBlank(preHtml);
+  } catch {
+    return null;
+  }
 }
