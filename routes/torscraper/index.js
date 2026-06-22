@@ -1,7 +1,9 @@
 import { saveDom } from './saveDom.js';
 import { scraperSources } from './scraperSources.js';
+import { parseScrapedPages } from './parseScrapedPages.js';
 
 export const scraperRoutes = [
   saveDom,
-  scraperSources
+  scraperSources,
+  parseScrapedPages,
 ];
