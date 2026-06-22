@@ -55,6 +55,34 @@ export function normalizeSizeToMBytes(value) {
   return null;
 }
 
+export function parseContentItem(value) {
+  const text = cleanText(String(value || ''));
+
+  if (!text) {
+    return null;
+  }
+
+  const sizeMatch = text.match(
+    /\s*[\(\[]?\s*([\d,.]+)\s*(bytes?|b|kb|kib|mb|mib|gb|gib|tb|tib)\s*[\)\]]?\s*$/i
+  );
+
+  if (!sizeMatch) {
+    return {
+      filename: text,
+      file_size: null
+    };
+  }
+
+  const sizeText = `${sizeMatch[1]} ${sizeMatch[2]}`;
+  const filename = cleanText(text.slice(0, sizeMatch.index));
+
+  return {
+    filename,
+    file_size: normalizeSizeToMBytes(sizeText)
+  };
+}
+
+
 export function uniqueStrings(values = []) {
   return [...new Set(
     values
