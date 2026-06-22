@@ -155,7 +155,7 @@ export const parseScrapedPages = {
           acc.byProfile[profile] = (acc.byProfile[profile] || 0) + 1;
 
           if (!row.parsed?.magnet_link) acc.missingMagnet += 1;
-          if (!row.parsed?.contents?.length) acc.missingContents += 1;
+          if (!row.parsed?.contents?.length) acc.emptyContents += 1;
           if (row.parsed?.warnings?.length) acc.withWarnings += 1;
         } else {
           acc.failed += 1;
@@ -166,7 +166,7 @@ export const parseScrapedPages = {
         ok: 0,
         failed: 0,
         missingMagnet: 0,
-        missingContents: 0,
+        emptyContents: 0,
         withWarnings: 0,
         byProfile: {}
       });
