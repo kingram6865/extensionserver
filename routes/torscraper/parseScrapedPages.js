@@ -147,10 +147,35 @@ export const parseScrapedPages = {
         }
       }
 
+      const summary = parsedRows.reduce((acc, row) => {
+        if (row.ok) {
+          acc.ok += 1;
+
+          const profile = row.parsed?.parserProfile || 'unknown';
+          acc.byProfile[profile] = (acc.byProfile[profile] || 0) + 1;
+
+          if (!row.parsed?.magnet_link) acc.missingMagnet += 1;
+          if (!row.parsed?.contents?.length) acc.missingContents += 1;
+          if (row.parsed?.warnings?.length) acc.withWarnings += 1;
+        } else {
+          acc.failed += 1;
+        }
+
+        return acc;
+      }, {
+        ok: 0,
+        failed: 0,
+        missingMagnet: 0,
+        missingContents: 0,
+        withWarnings: 0,
+        byProfile: {}
+      });
+
       return res.status(200).json({
         ok: true,
         dryRun,
         count: parsedRows.length,
+        summary,
         rows: parsedRows
       });
     } catch (err) {
