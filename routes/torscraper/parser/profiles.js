@@ -4,7 +4,8 @@ import {
   firstHtml,
   parseInteger,
   normalizeSizeToMBytes,
-  uniqueStrings
+  uniqueStrings,
+  parseContentItem,
 } from './helpers.js';
 
 function torrentProjectContents(document) {
@@ -15,7 +16,7 @@ function torrentProjectContents(document) {
       clone.querySelector('.file')?.remove();
       clone.querySelector('.file_size_search')?.remove();
 
-      return cleanText(clone.textContent || '');
+      return parseContentItem(clone.textContent || '');
     })
     .filter(Boolean);
 }
@@ -31,7 +32,7 @@ function torrentProjectSeedsPeers(document) {
 
 function torrentQuestContents(document) {
   return Array.from(document.querySelectorAll('#files-box .f-avi'))
-    .map(node => cleanText(node.textContent || ''))
+    .map(node => parseContentItem(node.textContent || ''))
     .filter(Boolean);
 }
 
@@ -62,9 +63,18 @@ function solidTorrentsContents(document) {
     '#file-tree .file-node p.text-sm, #file-tree .file-node [title], .file-name'
   ));
 
-  return uniqueStrings(
-    fileNodes.map(node => node.getAttribute('title') || node.textContent)
-  );
+  const items = fileNodes
+    .map(node => parseContentItem(node.getAttribute('title') || node.textContent))
+    .filter(Boolean);
+
+  const seen = new Set();
+
+  return items.filter(item => {
+    const key = `${item.filename}|${item.file_size ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function solidTorrentsStats(document) {
