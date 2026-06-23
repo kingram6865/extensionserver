@@ -1,4 +1,3 @@
-import axios from 'axios';
 import {
   createDocument,
   cleanText,
@@ -9,7 +8,6 @@ import {
   getMagnetTrackers,
   comparableName,
   normalizeSizeToMBytes,
-  parseInteger,
   uniqueStrings,
   nullIfBlank,
 } from './helpers.js';
