@@ -1,9 +1,6 @@
-import axios from 'axios';
 import {
-  createDocument,
   cleanText,
   firstText,
-  firstHtml,
   parseInteger,
   normalizeSizeToMBytes,
   uniqueStrings,
