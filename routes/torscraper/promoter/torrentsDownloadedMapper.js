@@ -84,7 +84,8 @@ export function mapParsedTorrentToDownloaded(row) {
     trackers: JSON.stringify(trackers),
     contents: JSON.stringify(contents),
 
-    single_file: files === null ? null : files === 1 ? 1 : 0,
+    // single_file: files === null ? null : files === 1 ? 1 : 0,
+    single_file: 1,
     hash: extractBtihHash(row.magnet_link)
   };
 }
