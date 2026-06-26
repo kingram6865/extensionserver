@@ -56,3 +56,23 @@ export function secondsToHMS(seconds) {
 
   return `${hours}${minutes}${secs}`;
 }
+
+export function normalizeTimeToLocal(timeValue,
+  { locale = 'en-US', timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone, } = {}) {
+  if (!timeValue) return '';
+  const date = new Date(timeValue);
+
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZone,
+    timeZoneName: 'short',
+  }).format(date);
+}
