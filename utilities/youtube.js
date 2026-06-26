@@ -3,10 +3,22 @@ import axios from 'axios';
 import util from 'node:util';
 import { executeSQL, formatSQL } from '../db/connect';
 import * as color from './consoleColors'
-import { formatPublishedDate, formatDuration, secondsToHMS, formatDateString } from './tools';
+import { formatPublishedDate, formatDuration, secondsToHMS, formatDateString, normalizeTimeToLocal } from './tools';
 const baseUrl = `https://youtube.googleapis.com/youtube/v3`
 const targetDatabase = 'random_facts'
 // const targetDatabase = 'test'
+
+function normalizeYouTubeVideoId(input) {
+  const raw = String(input ?? '').trim();
+
+  const match = raw.match(/[A-Za-z0-9_-]{11}/);
+
+  if (!match) {
+    throw new Error(`Invalid YouTube video ID: ${raw}`);
+  }
+
+  return match[0];
+}
 
 function logAxiosError(err, context = {}) {
   // Axios puts the useful API error payload on err.response.data
@@ -36,11 +48,6 @@ function logAxiosError(err, context = {}) {
   }
 }
 
-
-
-
-
-
 function dbDataCondenser(input) {
   return {
     objid: input.objid,
@@ -64,30 +71,61 @@ export async function getVideoData(videoId) {
     throw new Error('Missing env var API_KEY1 (YouTube API key)');
   }
 
-  const videoUrl = `${baseUrl}/videos?part=snippet%2CcontentDetails%2Cstatistics&id=${encodeURIComponent(videoId)}&key=${process.env.API_KEY1}`;
+  const normalizedVideoId = normalizeYouTubeVideoId(videoId);
+  const params = {
+    part: 'snippet,contentDetails,statistics,liveStreamingDetails',
+    id: normalizedVideoId,
+    key: process.env.API_KEY1,
+  }
+
+  // const videoUrl = `${baseUrl}/videos?part=snippet%2CcontentDetails%2Cstatistics&id=${encodeURIComponent(videoId)}&key=${process.env.API_KEY1}`;
 
   try {
-    const result = await axios.get(videoUrl);
-    if (!result?.data?.items?.length) {
-      // Not a 403 case, but prevents TypeErrors later.
-      return null;
-    }    
+    const result = await axios.get(`${baseUrl}/videos`, {params});
+    const item = result?.data?.items?.[0];
+
+    if (!item) {
+      throw new Error(`YouTube API returned no video item for ID: ${normalizedVideoId}`);
+    }
+
+    const snippet = item.snippet ?? {};
+    const contentDetails = item.contentDetails ?? {};
+    const liveStatus = snippet.liveBroadcastContent ?? 'none';
+    const rawDuration = contentDetails.duration ?? null;
+    const isUpcoming = liveStatus === 'upcoming';
+    const liveStreamingDetails = item.liveStreamingDetails ?? {};
+    const liveStartTime = normalizeTimeToLocal(liveStreamingDetails.scheduledStartTime)
+    const pendingStatus = isUpcoming ? `YouTube live broadcast is scheduled for ${liveStartTime}` : '';
+
 
     const desiredData = {
-      UploadDate: formatPublishedDate(result.data.items[0].snippet.publishedAt),
-      ChannelId: result.data.items[0].snippet.channelId,
-      Title: result.data.items[0].snippet.title,
-      Description: result.data.items[0].snippet.description,
-      Thumbnails: JSON.stringify(result.data.items[0].snippet.thumbnails),
-      Keywords: (result.data.items[0].snippet.tags) ? result.data.items[0].snippet.tags.join(",") : "",
-      PlayLength: formatDuration(result.data.items[0].contentDetails.duration),
-      VideoId: videoId,
-      Status: 1
+      UploadDate: snippet.publishedAt ? formatPublishedDate(snippet.publishedAt)     : '',
+      ChannelId: snippet.channelId ?? '',
+      Title: snippet.title ?? '',
+      Description: snippet.description ?? '',
+      Thumbnails: JSON.stringify(snippet.thumbnails ?? {}),
+      Keywords: snippet.tags ? snippet.tags.join(",") : "",
+       PlayLength: rawDuration ? formatDuration(rawDuration) : '',
+      VideoId: normalizedVideoId,
+      Status: 1,
+      Pending: pendingStatus,
+      ScheduledStartTime: normalizeTimeToLocal(liveStreamingDetails.scheduledStartTime),
+      Notes: '',
     }
 
     return desiredData;
   } catch(err) {
-    logAxiosError(err, { op: 'getVideoData', videoId });
+    if (err?.isAxiosError) {
+      logAxiosError(err, { op: 'getVideoData', normalizedVideoId });
+    } else {
+      console.error('getVideoData failed after YouTube API response', {
+        op: 'getVideoData',
+        normalizedVideoId,
+        message: err.message,
+        stack: err.stack,
+      });
+    }
+
     throw err;
   }
 }
@@ -144,8 +182,10 @@ async function channelExists(channelid) {
 
 async function dbAddVideo(input) {
   const SQL = "INSERT INTO youtube_downloads (channel_owner_id, upload_date, play_length,\
-  url, caption, description, thumbnail, keywords, status, viewed, amount_viewed, rewatch)\
-  VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
+  url, caption, description, thumbnail, keywords, status, viewed, amount_viewed, rewatch, \
+  pending_live, live_start_time, notes) \
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+
   const data = [
     input.ChannelOwnerId,
     input.UploadDate,
@@ -158,11 +198,11 @@ async function dbAddVideo(input) {
     input.Status,
     input.Viewed,
     input.AmountViewed,
-    input.Rewatch
+    input.Rewatch,
+    input.Pending,
+    input.ScheduledStartTime,
+    input.Notes,
   ];
-
-  // let sql = formatSQL(SQL, data)
-  // return sql
 
   try {
     const results = await executeSQL(SQL, targetDatabase, 55, data);
