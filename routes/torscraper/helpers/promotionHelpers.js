@@ -1,5 +1,5 @@
 const DEFAULT_LIMIT = 5;
-const MAX_BATCH_SIZE = 10;
+const MAX_BATCH_SIZE = 100;
 
 export function clampLimit(value) {
   if (value === undefined || value === null || value === '') {
