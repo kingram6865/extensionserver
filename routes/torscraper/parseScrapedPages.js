@@ -1,5 +1,6 @@
 import { executeSQL } from '../../db/dbconnect2';
 import { parseSavedPage } from './parser/parseSavedPage.js';
+import { buildPlaceholders, normalizePageSelector } from './helpers/pageSelectorHelpers.js';
 
 const DBCONFIG = { DB: 'torrents', SRC: 55 };
 
@@ -9,16 +10,28 @@ function clampLimit(value) {
   return Math.max(1, Math.min(n, 500));
 }
 
-async function fetchRows({ pageId, limit }) {
-  if (pageId) {
+async function fetchRows({ selector, limit }) {
+  if (selector.mode === 'single' || selector.mode === 'list') {
+    if (!selector.pageIds.length) return { data: [] };
+
     const SQL = `
       SELECT objid, source, page_url, page_title, content_html
       FROM scraped_pages
-      WHERE objid = ?
-      LIMIT 1
+      WHERE objid IN (${buildPlaceholders(selector.pageIds)})
+      ORDER BY objid`;
+
+    return executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, selector.pageIds);
+  }
+
+  if (selector.mode === 'range') {
+    const SQL = `
+      SELECT objid, source, page_url, page_title, content_html
+      FROM scraped_pages
+      WHERE objid BETWEEN ? AND ?
+      ORDER BY objid
     `;
 
-    return executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [pageId]);
+    return executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [selector.pageIdStart, selector.pageIdEnd]);
   }
 
   const SQL = `
@@ -109,11 +122,11 @@ export const parseScrapedPages = {
   method: 'post',
   handler: async (req, res, next) => {
     try {
-      const pageId = req.body?.pageId ? Number.parseInt(req.body.pageId, 10) : null;
+      const selector = normalizePageSelector(req.body);
       const limit = clampLimit(req.body?.limit);
       const dryRun = req.body?.dryRun === true;
 
-      const result = await fetchRows({ pageId, limit });
+      const result = await fetchRows({ selector, limit });
       const rows = result.data || [];
 
       const parsedRows = [];
@@ -174,6 +187,7 @@ export const parseScrapedPages = {
       return res.status(200).json({
         ok: true,
         dryRun,
+        selector,
         count: parsedRows.length,
         summary,
         rows: parsedRows
