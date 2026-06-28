@@ -1,7 +1,7 @@
 import { executeSQL } from '../../../db/dbconnect2';
 import { reuse } from '../../../db/dbFunctions';
 import { mapParsedTorrentToDownloaded } from './torrentsDownloadedMapper.js';
-import { isDuplicateError } from './helpers.js';
+import { isDuplicateError } from '../helpers/promotionHelpers.js';
 
 const DBCONFIG = { DB: 'torrents', SRC: 55 };
 
@@ -11,8 +11,7 @@ export async function fetchParsedRows(options) {
     const orderPlaceholders = options.ids.map(() => '?').join(', ');
 
     const SQL = `
-      SELECT *
-      FROM scraped_page_torrents
+      SELECT * FROM scraped_page_torrents
       WHERE scraped_page_id IN (${idPlaceholders})
       ORDER BY FIELD(scraped_page_id, ${orderPlaceholders})
     `;
@@ -25,8 +24,7 @@ export async function fetchParsedRows(options) {
 
   if (options.mode === 'range') {
     const SQL = `
-      SELECT *
-      FROM scraped_page_torrents
+      SELECT * FROM scraped_page_torrents
       WHERE scraped_page_id BETWEEN ? AND ?
       ORDER BY scraped_page_id
     `;
@@ -38,10 +36,8 @@ export async function fetchParsedRows(options) {
   }
 
   const SQL = `
-    SELECT spt.*
-    FROM scraped_page_torrents spt
-    ORDER BY spt.objid
-    LIMIT ?
+    SELECT spt.* FROM scraped_page_torrents spt
+    ORDER BY spt.objid LIMIT ?
   `;
 
   return executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [options.limit]);
@@ -90,9 +86,10 @@ export async function insertTorrent(mapped) {
   let values;
 
   const reused = await reuse();
+  const reusableRows = reused.data || [];
 
-  if (reused.length > 0) {
-    const objid = reused[0].objid;
+  if (reusableRows.length > 0) {
+    const objid = reusableRows[0].objid;
 
     SQL = `
       UPDATE torrents_downloaded
@@ -137,44 +134,59 @@ export async function insertTorrent(mapped) {
       mapped.single_file,
       objid
     ];
-  } else {
-    SQL = `
-      INSERT INTO torrents_downloaded (
-        download_name,
-        source_url,
-        magnet_link,
-        files,
-        total_megabytes,
-        seeds,
-        peers,
-        info,
-        general_category,
-        specific_category,
-        trackers,
-        contents,
-        single_file
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
 
-    values = [
-      mapped.download_name,
-      mapped.source_url,
-      mapped.magnet_link,
-      mapped.files,
-      mapped.total_megabytes,
-      mapped.seeds,
-      mapped.peers,
-      mapped.info,
-      mapped.general_category,
-      mapped.specific_category,
-      mapped.trackers,
-      mapped.contents,
-      mapped.single_file
-    ];
+    const result = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, values);
+
+    return {
+      action: 'reuse_update',
+      insertId: null,
+      reusedObjid: objid,
+      result
+    };
   }
 
-  return executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, values);
+  SQL = `
+    INSERT INTO torrents_downloaded (
+      download_name,
+      source_url,
+      magnet_link,
+      files,
+      total_megabytes,
+      seeds,
+      peers,
+      info,
+      general_category,
+      specific_category,
+      trackers,
+      contents,
+      single_file
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  values = [
+    mapped.download_name,
+    mapped.source_url,
+    mapped.magnet_link,
+    mapped.files,
+    mapped.total_megabytes,
+    mapped.seeds,
+    mapped.peers,
+    mapped.info,
+    mapped.general_category,
+    mapped.specific_category,
+    mapped.trackers,
+    mapped.contents,
+    mapped.single_file
+  ];
+
+  const result = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, values);
+  return {
+    action: 'insert',
+    insertId: getInsertId(result),
+    reusedObjid: null,
+    result
+  };
 }
 
 export async function promoteParsedRows(rows, { dryRun }) {
@@ -208,14 +220,15 @@ export async function promoteParsedRows(rows, { dryRun }) {
     }
 
     try {
-      const insertResult = await insertTorrent(mapped);
-      const insertId = getInsertId(insertResult);
+      const promotionResult = await insertTorrent(mapped);
+      // const insertResult = await insertTorrent(mapped);
+      // const insertId = getInsertId(insertResult);
 
       promotedRows.push({
         scrapedPageId: row.scraped_page_id,
-        action: insertId ? 'insert' : 'insert_attempted',
-        insertId,
-        existingObjid: null,
+        action: promotionResult.action,
+        insertId: promotionResult.insertId,
+        existingObjid: promotionResult.reusedObjid,
         mapped
       });
     } catch (err) {
