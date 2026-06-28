@@ -1,4 +1,5 @@
 import { executeSQL } from '../../db/dbconnect2';
+import { reuse } from '../../db/dbFunctions';
 import { mapParsedTorrentToDownloaded } from './promoter/torrentsDownloadedMapper.js';
 
 const DBCONFIG = { DB: 'torrents', SRC: 55 };
@@ -11,55 +12,25 @@ function clampLimit(value) {
 
 async function fetchParsedRows({ scrapedPageId, limit }) {
   if (scrapedPageId) {
-    const SQL = `
-      SELECT *
-      FROM scraped_page_torrents
-      WHERE scraped_page_id = ?
-      LIMIT 1
-    `;
-
+    const SQL = ` SELECT * FROM scraped_page_torrents WHERE scraped_page_id = ? LIMIT 1`;
     return executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [scrapedPageId]);
   }
 
-  const SQL = `
-    SELECT spt.*
-    FROM scraped_page_torrents spt
-    ORDER BY spt.objid
-    LIMIT ?
-  `;
-
+  const SQL = `SELECT spt.* FROM scraped_page_torrents spt ORDER BY spt.objid LIMIT ?`;
   return executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [limit]);
 }
 
 async function findExistingTorrent(mapped) {
   if (mapped.hash) {
-    const byHash = await executeSQL(
-      `
-        SELECT objid
-        FROM torrents_downloaded
-        WHERE hash = ?
-        LIMIT 1
-      `,
-      DBCONFIG.DB,
-      DBCONFIG.SRC,
-      [mapped.hash]
-    );
+    const SQL = "SELECT objid FROM torrents_downloaded WHERE hash = ? LIMIT 1";
+    const byHash = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [mapped.hash]);
 
     if (byHash.data?.length) return byHash.data[0];
   }
 
   if (mapped.source_url) {
-    const byUrl = await executeSQL(
-      `
-        SELECT objid
-        FROM torrents_downloaded
-        WHERE source_url = ?
-        LIMIT 1
-      `,
-      DBCONFIG.DB,
-      DBCONFIG.SRC,
-      [mapped.source_url]
-    );
+    const SQL = "SELECT objid FROM torrents_downloaded WHERE source_url = ? LIMIT 1";
+    const byUrl = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [mapped.source_url]);
 
     if (byUrl.data?.length) return byUrl.data[0];
   }
@@ -68,40 +39,88 @@ async function findExistingTorrent(mapped) {
 }
 
 async function insertTorrent(mapped) {
-  const SQL = `
-    INSERT INTO torrents_downloaded (
-      download_name,
-      source_url,
-      magnet_link,
-      files,
-      total_megabytes,
-      seeds,
-      peers,
-      info,
-      general_category,
-      specific_category,
-      trackers,
-      contents,
-      single_file
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
+  let SQL, values;
+  let reused = await reuse();
 
-  const values = [
-    mapped.download_name,
-    mapped.source_url,
-    mapped.magnet_link,
-    mapped.files,
-    mapped.total_megabytes,
-    mapped.seeds,
-    mapped.peers,
-    mapped.info,
-    mapped.general_category,
-    mapped.specific_category,
-    mapped.trackers,
-    mapped.contents,
-    mapped.single_file
-  ];
+  if (reused.length > 0) {
+    const objid = reused[0].objid;
+
+    SQL = `UPDATE torrents_downloaded SET
+      download_name=?,
+      source_url=?,
+      magnet_link=?,
+      contents=?,
+      files=?,
+      total_megabytes=?,
+      seeds=?,
+      peers=?,
+      info=?,
+      general_category=?,
+      specific_category=?,
+      trackers=?,
+      single_file=?,
+      download_status='new',
+      availability=0,
+      share_ratio=0,
+      active=0,
+      archive_status='',
+      pieces=0,
+      piece_sizes_kb=0,
+      last_update=NOW()
+      WHERE objid = ?`;
+
+    values = [
+      mapped.download_name,
+      mapped.source_url,
+      mapped.magnet_link,
+      mapped.contents,
+      mapped.files,
+      mapped.total_megabytes,
+      mapped.seeds,
+      mapped.peers,
+      mapped.info,
+      mapped.general_category,
+      mapped.specific_category,
+      mapped.trackers,
+      mapped.single_file,
+      objid
+    ];
+
+  } else {
+    SQL = `
+      INSERT INTO torrents_downloaded (
+        download_name,
+        source_url,
+        magnet_link,
+        files,
+        total_megabytes,
+        seeds,
+        peers,
+        info,
+        general_category,
+        specific_category,
+        trackers,
+        contents,
+        single_file)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    values = [
+      mapped.download_name,
+      mapped.source_url,
+      mapped.magnet_link,
+      mapped.files,
+      mapped.total_megabytes,
+      mapped.seeds,
+      mapped.peers,
+      mapped.info,
+      mapped.general_category,
+      mapped.specific_category,
+      mapped.trackers,
+      mapped.contents,
+      mapped.single_file
+    ];
+  }
 
   return executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, values);
 }
