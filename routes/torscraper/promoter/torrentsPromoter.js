@@ -5,6 +5,17 @@ import { isDuplicateError } from '../helpers/promotionHelpers.js';
 
 const DBCONFIG = { DB: 'torrents', SRC: 55 };
 
+async function setPromotionStatus(data) {
+  const SQL = "UPDATE scraped_page_torrents SET promoted = ?, torrentdb_id = ? WHERE objid = ?";
+  const params = [data.promoted, data.dbId, data.rowId];
+  try {
+    const result = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, params)
+    // console.log(result);
+  } catch (error) {
+    console.log(error)
+  }
+}
+
 export async function fetchParsedRows(options) {
   if (options.mode === 'single' || options.mode === 'list') {
     const idPlaceholders = options.ids.map(() => '?').join(', ');
@@ -49,12 +60,11 @@ export async function findExistingTorrent(mapped) {
       SELECT objid
       FROM torrents_downloaded
       WHERE hash = ?
+      AND download_status <> 'reuse'
       LIMIT 1
     `;
 
-    const byHash = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [
-      mapped.hash
-    ]);
+    const byHash = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [mapped.hash]);
 
     if (byHash.data?.length) return byHash.data[0];
   }
@@ -64,12 +74,11 @@ export async function findExistingTorrent(mapped) {
       SELECT objid
       FROM torrents_downloaded
       WHERE source_url = ?
+      AND download_status <> 'reuse'
       LIMIT 1
     `;
 
-    const byUrl = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [
-      mapped.source_url
-    ]);
+    const byUrl = await executeSQL(SQL, DBCONFIG.DB, DBCONFIG.SRC, [mapped.source_url]);
 
     if (byUrl.data?.length) return byUrl.data[0];
   }
@@ -86,6 +95,7 @@ export async function insertTorrent(mapped) {
   let values;
 
   const reused = await reuse();
+  console.log(reused)
   const reusableRows = reused.data || [];
 
   if (reusableRows.length > 0) {
@@ -198,9 +208,11 @@ export async function promoteParsedRows(rows, { dryRun }) {
 
     if (dryRun) {
       promotedRows.push({
+        record: row.objid,
         scrapedPageId: row.scraped_page_id,
         action: existing ? 'dry_run_possible_duplicate' : 'dry_run_insert',
         existingObjid: existing?.objid || null,
+        promoted: 0,
         mapped
       });
 
@@ -209,10 +221,12 @@ export async function promoteParsedRows(rows, { dryRun }) {
 
     if (existing) {
       promotedRows.push({
+        record: row.objid,
         scrapedPageId: row.scraped_page_id,
         action: 'blocked_duplicate',
         existingObjid: existing.objid,
         insertId: null,
+        promoted: 0,
         mapped
       });
 
@@ -220,15 +234,24 @@ export async function promoteParsedRows(rows, { dryRun }) {
     }
 
     try {
+      let dbId;
       const promotionResult = await insertTorrent(mapped);
-      // const insertResult = await insertTorrent(mapped);
-      // const insertId = getInsertId(insertResult);
+
+      if (!promotionResult.reusedObjid) {
+        dbId = promotionResult.insertId;
+      } else {
+        dbId = promotionResult.reusedObjid;
+      }
+
+      setPromotionStatus({ promoted: 1, dbId, rowId: row.objid });
 
       promotedRows.push({
+        record: row.objid,
         scrapedPageId: row.scraped_page_id,
         action: promotionResult.action,
         insertId: promotionResult.insertId,
         existingObjid: promotionResult.reusedObjid,
+        promoted: 1,
         mapped
       });
     } catch (err) {
@@ -243,6 +266,7 @@ export async function promoteParsedRows(rows, { dryRun }) {
         action: 'blocked_duplicate',
         existingObjid: duplicate?.objid || null,
         insertId: null,
+        promoted: 0,
         error: err.message || String(err),
         mapped
       });
