@@ -13,6 +13,7 @@ import { appLogger, createStructuredLogger, requestLogger, interceptConsoleTo } 
 import { ytsaverRoutes } from './routes/ytsaver';
 import { scraperRoutes } from './routes/torscraper';
 import { fbSaverRoutes } from './routes/facebook';
+import { eoeRoutes } from './routes/eoe';
 import { getJsonLimitValue } from './config/serverLimits.js';
 
 const PORT = process.env.PORT || 3019;
@@ -75,6 +76,10 @@ scraperRoutes.forEach(route => {
 });
 
 fbSaverRoutes.forEach(route => {
+    app[route.method](route.path, route.handler);
+});
+
+eoeRoutes.forEach(route => {
     app[route.method](route.path, route.handler);
 });
 
