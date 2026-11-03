@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nodemon --exec babel-node ./server.js",
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --require @babel/register --test"
   },
   "keywords": [],
   "author": "Ken Ingram; Solution Design Laboratory",
