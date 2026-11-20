@@ -31,7 +31,11 @@ export async function startEoeAuthorizationHandler(req, res) {
       .createHash('sha256')
       .update(state)
       .digest('hex');
-    const expiresAt = new Date(Date.now() + STATE_TTL_MINUTES * 60 * 1000);
+
+    const expiresAt = new Date(Date.now() + STATE_TTL_MINUTES * 60 * 1000)
+      .toISOString()
+      .slice(0, 19)
+      .replace('T', ' ');
 
     const stateInsertSql = `
       INSERT INTO eoe_oauth_states
